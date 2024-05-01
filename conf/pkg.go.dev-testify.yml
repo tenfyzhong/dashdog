@@ -1,0 +1,116 @@
+path: "$HOME/dash-docset"
+name: testify
+url: https://pkg.go.dev/github.com/stretchr/testify
+plist:
+    cfbundle_identifier: godoc
+    cfbundle_name: stretchr/testify
+    doc_set_platform_family: godoc
+    dash_doc_set_play_url: https://go.dev/play/
+    is_java_script_enabled: true
+    dash_doc_set_default_ftsenabled: false
+depth: 2
+sub_path_regex: ^\/github\.com\/stretchr\/testify@v\d+\.\d+\.\d+/\w+$
+sub_path_bundle_name:
+    pattern: ^\/github\.com\/(stretchr\/testify)@v\d+\.\d+\.\d+/(\w+)$
+    replace: $1/$2
+index:
+    index_rows:
+        - selector: h3#pkg-index
+          type: Section
+          name:
+            type: 2
+            value: Sections
+          level: 1
+          anchor_only: true
+        - selector: .Documentation-indexConstants
+          type: Section
+          name:
+            type: 2
+            value: Constants
+          level: 0
+          anchor_only: true
+        - selector: .Documentation-indexVariables
+          type: Section
+          name:
+            type: 2
+            value: Variables
+          level: 0
+          anchor_only: true
+        - selector: h3#pkg-functions
+          type: Function
+          name:
+            type: 2
+            value: Functions
+          level: 1
+          anchor_only: true
+        - selector: h4[data-kind=function]
+          type: Function
+          name:
+            type: 1
+            value: id
+          level: 0
+          anchor_only: false
+        - selector: h4[data-kind=type]
+          type: tdef
+          name:
+            type: 1
+            value: id
+          level: 1
+          anchor_only: true
+        - selector: h4[data-kind=type]
+          type: tdef
+          name:
+            type: 1
+            value: id
+          level: 0
+          anchor_only: false
+        - selector: h4[data-kind=method]
+          type: Function
+          name:
+            type: 1
+            value: id
+          level: 0
+          anchor_only: false
+        - selector: h3#pkg-constants
+          type: Constant
+          name:
+            type: 2
+            value: Constants
+          level: 1
+          anchor_only: true
+        - selector: span[data-kind=constant]
+          type: Constant
+          name:
+            type: 1
+            value: id
+          level: 0
+          anchor_only: false
+        - selector: h3#pkg-variables
+          type: Variable
+          name:
+            type: 2
+            value: Variables
+          level: 1
+          anchor_only: true
+        - selector: span[data-kind=variable]
+          type: Variable
+          name:
+            type: 1
+            value: id
+          level: 0
+          anchor_only: false
+page:
+    remove_node_selector:
+        - .go-Header
+        - .go-Main-header
+        - .go-Main-banner
+        - .go-Main-nav
+        - .go-Main-aside
+        - .go-Main-footer
+        - .go-Footer
+        - .UnitReadme-content img[src*=badge]
+    set_attrs:
+        - selector: .go-Main
+          attr:
+            key: style
+            value: 'display: block'

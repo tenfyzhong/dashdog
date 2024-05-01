@@ -18,13 +18,14 @@ type docTree struct {
 }
 
 func newDocTree(path, name string) *docTree {
+	path = os.ExpandEnv(path)
 	if path == "" {
 		path, _ = os.Getwd()
 	}
 
 	docset := fmt.Sprintf("%s.docset", name)
 	documents := filepath.Join(path, docset, "Contents", "Resources", "Documents")
-	plist := filepath.Join(path, docset, "Info.plist")
+	plist := filepath.Join(path, docset, "Contents", "Info.plist")
 	db := filepath.Join(path, docset, "Contents", "Resources", "docSet.dsidx")
 
 	return &docTree{

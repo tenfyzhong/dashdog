@@ -10,4 +10,5 @@ require (
 	github.com/urfave/cli/v3 v3.0.0-alpha9 // indirect
 	github.com/xrash/smetrics v0.0.0-20240312152122-5f08fbb34913 // indirect
 	golang.org/x/net v0.24.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
