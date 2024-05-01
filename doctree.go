@@ -3,11 +3,13 @@ package dashdog
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/pkg/errors"
 )
 
 type docTree struct {
+	path string
 	name string
 
 	documents string
@@ -15,12 +17,23 @@ type docTree struct {
 	db        string
 }
 
-func newDocTree(name string) *docTree {
+func newDocTree(path, name string) *docTree {
+	path = os.ExpandEnv(path)
+	if path == "" {
+		path, _ = os.Getwd()
+	}
+
+	docset := fmt.Sprintf("%s.docset", name)
+	documents := filepath.Join(path, docset, "Contents", "Resources", "Documents")
+	plist := filepath.Join(path, docset, "Contents", "Info.plist")
+	db := filepath.Join(path, docset, "Contents", "Resources", "docSet.dsidx")
+
 	return &docTree{
+		path:      path,
 		name:      name,
-		documents: fmt.Sprintf("%s.docset/Contents/Resources/Documents/", name),
-		plist:     fmt.Sprintf("%s.docset/Contents/Info.plist", name),
-		db:        fmt.Sprintf("%s.docset/Contents/Resources/docSet.dsidx", name),
+		documents: documents,
+		plist:     plist,
+		db:        db,
 	}
 }
 

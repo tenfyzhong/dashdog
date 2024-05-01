@@ -59,7 +59,7 @@ func (r Reference) String() string {
 func NewDash(config Config) (*Dash, error) {
 	d := &Dash{
 		httpClient: resty.New(),
-		tree:       newDocTree(config.Name),
+		tree:       newDocTree(config.Path, config.Name),
 		config:     config,
 		downloaded: map[string]bool{},
 	}
@@ -71,10 +71,10 @@ func NewDash(config Config) (*Dash, error) {
 			return nil, errors.Wrapf(err, "regexp.Compile SubPathRegex %s", config.SubPathRegex)
 		}
 	}
-	if config.SubPathBundleNameReplace.Pattern != "" {
-		d.subPathBundleNameRegex, err = regexp.Compile(config.SubPathBundleNameReplace.Pattern)
+	if config.SubPathBundleName.Pattern != "" {
+		d.subPathBundleNameRegex, err = regexp.Compile(config.SubPathBundleName.Pattern)
 		if err != nil {
-			return nil, errors.Wrapf(err, "regexp.Compile SubPathBundleNameReplace.Pattern %s", config.SubPathBundleNameReplace.Pattern)
+			return nil, errors.Wrapf(err, "regexp.Compile SubPathBundleName.Pattern %s", config.SubPathBundleName.Pattern)
 		}
 	}
 
@@ -324,14 +324,14 @@ func (d Dash) bundleNameOfPath(path string) string {
 	if path == "" {
 		return d.config.Plist.CFBundleName
 	}
-	if d.config.SubPathBundleNameReplace.Replace == "" {
+	if d.config.SubPathBundleName.Replace == "" {
 		return path
 	}
 	if !d.subPathBundleNameRegex.MatchString(path) {
 		return d.config.Plist.CFBundleName
 	}
 
-	return d.subPathBundleNameRegex.ReplaceAllString(path, d.config.SubPathBundleNameReplace.Replace)
+	return d.subPathBundleNameRegex.ReplaceAllString(path, d.config.SubPathBundleName.Replace)
 }
 
 func (d Dash) insertOnlineRedirection(doc *html.Node, urlStr string) {

@@ -49,18 +49,19 @@ type Page struct {
 	SetAttrs           []SelectAttr `yaml:"set_attrs"`
 }
 
-type SubPathBundleNameReplace struct {
+type SubPathBundleName struct {
 	Pattern string `yaml:"pattern"` // a pattern match the path of url
 	Replace string `yaml:"replace"` // a pattern to replace the source path
 }
 
 type Config struct {
-	Name                     string                   `yaml:"name"`           // docset name
-	URL                      string                   `yaml:"url"`            // the html url to populate
-	Plist                    Plist                    `yaml:"plist"`          // config info.plit
-	Index                    Index                    `yaml:"index"`          // sqlite index
-	Page                     Page                     `yaml:"page"`           // html page modify
-	Depth                    int                      `yaml:"depth"`          // max depth to process
-	SubPathRegex             string                   `yaml:"sub_path_regex"` // which sub page will be process if the path match the regex
-	SubPathBundleNameReplace SubPathBundleNameReplace `yaml:"sub_path_bundle_name_replace"`
+	Path              string            `yaml:"path"`           // The path to generate docset, it will be make if not exist
+	Name              string            `yaml:"name"`           // docset name
+	URL               string            `yaml:"url"`            // the html url to populate
+	Plist             Plist             `yaml:"plist"`          // config info.plit
+	Index             Index             `yaml:"index"`          // sqlite index
+	Page              Page              `yaml:"page"`           // html page modify
+	Depth             int               `yaml:"depth"`          // max depth to process
+	SubPathRegex      string            `yaml:"sub_path_regex"` // which sub page will be process if the path match the regex
+	SubPathBundleName SubPathBundleName `yaml:"sub_path_bundle_name"`
 }
