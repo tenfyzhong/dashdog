@@ -55,6 +55,7 @@ type SubPathBundleNameReplace struct {
 }
 
 type Config struct {
+	Path                     string                   `yaml:"path"`           // The path to generate docset, it will be make if not exist
 	Name                     string                   `yaml:"name"`           // docset name
 	URL                      string                   `yaml:"url"`            // the html url to populate
 	Plist                    Plist                    `yaml:"plist"`          // config info.plit

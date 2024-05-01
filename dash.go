@@ -59,7 +59,7 @@ func (r Reference) String() string {
 func NewDash(config Config) (*Dash, error) {
 	d := &Dash{
 		httpClient: resty.New(),
-		tree:       newDocTree(config.Name),
+		tree:       newDocTree(config.Path, config.Name),
 		config:     config,
 		downloaded: map[string]bool{},
 	}
