@@ -109,7 +109,7 @@ func main() {
 		HideVersion:                false,
 		EnableShellCompletion:      true,
 		ShellCompletionCommandName: "dashdog",
-		Before: func(ctx context.Context, cmd *cli.Command) error {
+		Before: func(_ context.Context, cmd *cli.Command) error {
 			setLogLevel(cmd)
 			return nil
 		},
@@ -143,6 +143,7 @@ func action(_ context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return errors.Wrapf(err, "Unmarshal config, [%s]", string(data))
 	}
+	overwriteConfig(&config, cmd)
 
 	dash, err := dashdog.NewDash(config)
 	if err != nil {
@@ -155,6 +156,33 @@ func action(_ context.Context, cmd *cli.Command) error {
 	}
 
 	return nil
+}
+
+func overwriteConfig(config *dashdog.Config, cmd *cli.Command) {
+	if cmd.IsSet(flagPath) {
+		config.Path = cmd.String(flagPath)
+	}
+	if cmd.IsSet(flagName) {
+		config.Path = cmd.String(flagName)
+	}
+	if cmd.IsSet(flagURL) {
+		config.URL = cmd.String(flagURL)
+	}
+	if cmd.IsSet(flagCFBundleName) {
+		config.Plist.CFBundleName = cmd.String(flagCFBundleName)
+	}
+	if cmd.IsSet(flagDepth) {
+		config.Depth = int(cmd.Int(flagDepth))
+	}
+	if cmd.IsSet(flagPathRegex) {
+		config.SubPathRegex = cmd.String(flagPathRegex)
+	}
+	if cmd.IsSet(flagSubPathBundleNamePattern) {
+		config.SubPathBundleName.Pattern = cmd.String(flagSubPathBundleNamePattern)
+	}
+	if cmd.IsSet(flagSubPathBundleNameReplace) {
+		config.SubPathBundleName.Replace = cmd.String(flagSubPathBundleNameReplace)
+	}
 }
 
 func setLogLevel(cmd *cli.Command) {
