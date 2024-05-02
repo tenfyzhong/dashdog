@@ -19,7 +19,7 @@ import (
 func main() {
 	app := &cli.Command{
 		Name:        "dashdog",
-		Usage:       "a tool to generate docset for dash",
+		Usage:       "a tool to generate docset from html for dash",
 		UsageText:   "dashdog -c|--config <file> [--log off] [config options]",
 		Version:     version.Version,
 		Description: "",
@@ -59,6 +59,7 @@ func main() {
 				OnlyOnce:  true,
 				Usage:     "the `path` to generate docset, it will overwrite the value of `path` item in the config file",
 				TakesFile: true,
+				Value:     defaultPath,
 			},
 			&cli.StringFlag{
 				Name:     flagName,
@@ -76,7 +77,7 @@ func main() {
 				Name:     flagCFBundleName,
 				Category: categoryConfig,
 				OnlyOnce: true,
-				Usage:    "the `bundle-name` of the root page, it will overwrite the value of `plist->cfbndle_name` item in the config",
+				Usage:    "the `bundle` of the root page, it will overwrite the value of `plist->cfbndle_name` item in the config",
 			},
 			&cli.IntFlag{
 				Name:     flagDepth,
@@ -89,19 +90,19 @@ func main() {
 				Name:     flagPathRegex,
 				Category: categoryConfig,
 				OnlyOnce: true,
-				Usage:    "only the path match the `pattern` will process, it will overwrite the value of `sub_path_regex` item in the config",
+				Usage:    "the sub path which match the `pattern` will be able to generate, it will overwrite the value of `sub_path_regex` item in the config",
 			},
 			&cli.StringFlag{
 				Name:     flagSubPathBundleNamePattern,
 				Category: categoryConfig,
 				OnlyOnce: true,
-				Usage:    "a `pattern` to match the path of the sub module name, the group captured can be use in the sub-pattern-bundle-name-replace flag, it will overwrite the value of `sub_path_bundle_name->pattern` item in the config",
+				Usage:    "a `pattern` to match the path of the sub module name, the group captured can be use in the --bundle-replace flag, it will overwrite the value of `sub_path_bundle_name->pattern` item in the config",
 			},
 			&cli.StringFlag{
 				Name:     flagSubPathBundleNameReplace,
 				Category: categoryConfig,
 				OnlyOnce: true,
-				Usage:    "a `replace-pattern` to replace the path which matched by sub-pattern-bundle-name-pattern flag, it will overwrite the value of `sub_pattern_bundle_name->replace` item in the config",
+				Usage:    "a `replace-pattern` to replace the path which matched by --bundle-pattern flag, it will overwrite the value of `sub_pattern_bundle_name->replace` item in the config",
 			},
 		},
 		HideHelp:                   false,
@@ -144,6 +145,9 @@ func action(_ context.Context, cmd *cli.Command) error {
 		return errors.Wrapf(err, "Unmarshal config, [%s]", string(data))
 	}
 	overwriteConfig(&config, cmd)
+	if config.Depth == 0 {
+		config.Depth = 1
+	}
 
 	dash, err := dashdog.NewDash(config)
 	if err != nil {
@@ -161,9 +165,12 @@ func action(_ context.Context, cmd *cli.Command) error {
 func overwriteConfig(config *dashdog.Config, cmd *cli.Command) {
 	if cmd.IsSet(flagPath) {
 		config.Path = cmd.String(flagPath)
+	} else {
+		config.Path = defaultPath
 	}
+
 	if cmd.IsSet(flagName) {
-		config.Path = cmd.String(flagName)
+		config.Name = cmd.String(flagName)
 	}
 	if cmd.IsSet(flagURL) {
 		config.URL = cmd.String(flagURL)
@@ -201,13 +208,13 @@ func setLogLevel(cmd *cli.Command) {
 	case "off":
 		lvl.Set(logOffLevel)
 	default:
-		lvl.Set(logOffLevel)
+		lvl.Set(slog.LevelError)
 	}
 
 	h := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		AddSource: true,
 		Level:     lvl,
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.SourceKey {
 				s := a.Value.Any().(*slog.Source)
 				s.File = path.Base(s.File)

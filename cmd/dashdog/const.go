@@ -9,14 +9,16 @@ const (
 	flagPath                     = "path"
 	flagName                     = "name"
 	flagURL                      = "url"
-	flagCFBundleName             = "cfbundle-name"
+	flagCFBundleName             = "cfbundle"
 	flagDepth                    = "depth"
-	flagPathRegex                = "sub-path-regex"
-	flagSubPathBundleNamePattern = "sub-pattern-bundle-name-pattern"
-	flagSubPathBundleNameReplace = "sub-pattern-bundle-name-replace"
+	flagPathRegex                = "path-regex"
+	flagSubPathBundleNamePattern = "bundle-pattern"
+	flagSubPathBundleNameReplace = "bundle-replace"
 
 	logOffLevel slog.Level = 16
 
 	categoryGlobal = "global"
 	categoryConfig = "config"
+
+	defaultPath = "$HOME/dashdog-doc/"
 )

@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+
+default_config=/usr/local/share/dashdog/conf/pkg.go.dev.yml
+
+function _dashdog_go_help {
+    echo 'dashdog-go: generate golang package docset for dash'
+    echo 'Usage: dashdog-go [options]'
+    echo ''
+    echo 'Options:'
+    echo "-c/--config                   the config to load, default: $default_config"
+    echo '--log                         log level, the log will print to stdout, available value:[debug,info,warn,error,off]'
+    echo '--path path                   the path go generate docset, it will overwrite the value of `path` item in the config file, deault: $HOME/dashdog-doc'
+    echo '--cfbundle bundle             the bundle of the root page, it will overwrite the value of `plist->cfbundle_name` item in the config'
+    echo '-p/--pkg pkg                  the golang package doc to generate'
+    echo '--depth depth                 the max depth of sub page to generate, at least 1, it will overwrite the value of `depth` item in the config'
+    echo '--path-regex pattern          the sub path which match the pattern will be able to generate, it will overwite the value of `sub_path_regex` item in the config'
+    echo '--bundle-pattern pattern      a pattern to match the path of the sub module name, the group captured can be use in the --bundle-replace flag, it will overwrite the value of `sub_path_bundle_name->pattern` item in the config'
+    echo '--bundle-replace pattern      a pattern to replace the path which matched by --bundle-pattern flag, it will overwrite the value of `sub_pattern_bundle_name->replace` item in the config'
+    echo '-h/--help                     show help'
+}
+
+function check_flag {
+    if [ $# -ne 1 ]; then
+        exit 2
+    fi
+    if [ -z "$1" ]; then
+        exit 2
+    fi
+}
+
+function _dashdog_go {
+    if [[ $# -eq 0 ]]; then
+        _dashdog_go_help
+        exit 1
+    fi
+
+    cmd=dashdog
+    config="$default_config"
+    pkg=
+    cfbundle=
+    while [[ $# -gt 0 ]]; do
+        case $1 in 
+            -c|--config)
+                check_flag "$2"
+                # cmd="$cmd -c $2"
+                config=$2
+                shift
+                shift
+                ;;
+            --log)
+                check_flag "$2"
+                cmd="$cmd --log $2"
+                shift
+                shift
+                ;;
+            --path)
+                check_flag "$2"
+                cmd="$cmd --path $2"
+                shift
+                shift
+                ;;
+            --cfbundle)
+                check_flag "$2"
+                cfbundle="$2"
+                shift
+                shift
+                ;;
+            -p|--pkg)
+                check_flag "$2"
+                pkg=$2
+                shift
+                shift
+                ;;
+            --depth)
+                check_flag "$2"
+                cmd="$cmd --depth $2"
+                shift
+                shift
+                ;;
+            --path-regex)
+                check_flag "$2"
+                cmd="$cmd --path-regex '$2'"
+                shift
+                shift
+                ;;
+            --bundle-pattern)
+                check_flag "$2"
+                cmd="$cmd --bundle-pattern '$2'"
+                shift
+                shift
+                ;;
+            --bundle-replace)
+                check_flag "$2"
+                cmd="$cmd --bundle-replace '$2'"
+                shift
+                shift
+                ;;
+            -h|--help)
+                _dashdog_go_help
+                exit 0
+                ;;
+            *)
+                _dashdog_go_help
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ -z "$pkg" ]; then
+        exit 3
+    fi
+
+    cmd="$cmd --config $config"
+
+    if [ -z $cfbundle ]; then
+        cfbundle=$(echo "$pkg" | sed 's/[^/]*\/\?\([^/]\+\/[^/]\+\)$/\1/')
+    fi
+
+    cmd="$cmd --name '$cfbundle' --url 'https://pkg.go.dev/$pkg' -cfbundle '$cfbundle'"
+
+    eval "$cmd"
+}
+
+_dashdog_go "$@"

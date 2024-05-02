@@ -57,6 +57,11 @@ func (r Reference) String() string {
 }
 
 func NewDash(config Config) (*Dash, error) {
+	if config.Depth == 0 {
+		config.Depth = 1
+	}
+	config.Name = strings.ReplaceAll(config.Name, "/", "-")
+
 	d := &Dash{
 		httpClient: resty.New(),
 		tree:       newDocTree(config.Path, config.Name),
@@ -82,6 +87,8 @@ func NewDash(config Config) (*Dash, error) {
 }
 
 func (d *Dash) Build() error {
+	slog.Info("build", slog.Any("config", d.config))
+
 	// remove old data if exist
 	if err := d.tree.Rm(); err != nil {
 		return errors.Wrapf(err, "rm")
@@ -325,7 +332,7 @@ func (d Dash) bundleNameOfPath(path string) string {
 		return d.config.Plist.CFBundleName
 	}
 	if d.config.SubPathBundleName.Replace == "" {
-		return path
+		return d.config.Plist.CFBundleName
 	}
 	if !d.subPathBundleNameRegex.MatchString(path) {
 		return d.config.Plist.CFBundleName
