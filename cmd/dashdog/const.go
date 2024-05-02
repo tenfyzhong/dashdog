@@ -20,5 +20,5 @@ const (
 	categoryGlobal = "global"
 	categoryConfig = "config"
 
-	defaultPath = "$HOME/dashdog-doc/"
+	defaultPath = "$HOME/Documents/dashdog-doc/"
 )

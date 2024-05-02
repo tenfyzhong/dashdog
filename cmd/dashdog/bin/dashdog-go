@@ -9,7 +9,7 @@ function _dashdog_go_help {
     echo 'Options:'
     echo "-c/--config                   the config to load, default: $default_config"
     echo '--log                         log level, the log will print to stdout, available value:[debug,info,warn,error,off]'
-    echo '--path path                   the path go generate docset, it will overwrite the value of `path` item in the config file, deault: $HOME/dashdog-doc'
+    echo '--path path                   the path go generate docset, it will overwrite the value of `path` item in the config file, deault: $HOME/Documents/dashdog-doc'
     echo '--cfbundle bundle             the bundle of the root page, it will overwrite the value of `plist->cfbundle_name` item in the config'
     echo '-p/--pkg pkg                  the golang package doc to generate'
     echo '--depth depth                 the max depth of sub page to generate, at least 1, it will overwrite the value of `depth` item in the config'
