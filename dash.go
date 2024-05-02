@@ -409,11 +409,14 @@ func (d *Dash) fetchResource(ourl *url.URL, doc *html.Node, level int) error {
 				return errors.Wrapf(err, "Parse %s", attr.Val)
 			}
 
+			if u.Scheme == "" {
+				u.Scheme = ourl.Scheme
+			}
 			if u.Host == "" {
 				u.Host = ourl.Host
 			}
-			if u.Scheme == "" {
-				u.Scheme = ourl.Scheme
+			if u.Path == "" {
+				u.Path = ourl.Path
 			}
 
 			// not a atom.A => set a relative url, push to queue
@@ -443,7 +446,7 @@ func (d *Dash) fetchResource(ourl *url.URL, doc *html.Node, level int) error {
 			}
 
 			if ourl.Path == u.Path {
-				node.Attr[i].Val = relativeURL(prefix, u, "")
+				node.Attr[i].Val = relativeURL(prefix, u, ".html")
 				continue
 			}
 
