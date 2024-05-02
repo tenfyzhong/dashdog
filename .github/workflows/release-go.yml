@@ -27,5 +27,5 @@ jobs:
     with:
       bin-path: "./cmd/dashdog"
       command: "dashdog"
-      build-option: "-ldflags \"-X 'github.com/tenfyzhong/dashdog/cmd/dashdog/config.Version=${{ needs.tag.outputs.version }}'\""
+      build-option: "-ldflags \"-X 'github.com/tenfyzhong/dashdog/cmd/dashdog/version.Version=${{ needs.tag.outputs.version }}'\""
 
