@@ -1,0 +1,10 @@
+complete -c dashdog-go -f
+complete -c dashdog-go -r -f -s p -l pkg -d 'the golang package doc to generate'
+complete -c dashdog-go -r -F -s c -l config -d 'the config file to load'
+complete -c dashdog-go -r -f -l log -a 'debug info warn error off' -d 'log level, the log will print to stdout'
+complete -c dashdog-go -r -F -l path -d 'the path to generate docset'
+complete -c dashdog-go -r -f -l cfbundle -d 'the bundle of the root page'
+complete -c dashdog-go -r -f -l path-regex -d 'the sub path which match the `pattern` will be able to generate'
+complete -c dashdog-go -r -f -l bundle-pattern -d 'a `pattern` to match the path of the sub module name'
+complete -c dashdog-go -r -f -l bundle-replace -d 'a `replace-pattern` to replace the path which matched by --bundle-pattern flag'
+complete -c dashdog-go -s h -l help -d 'show help'

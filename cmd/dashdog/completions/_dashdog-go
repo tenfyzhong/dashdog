@@ -1,0 +1,32 @@
+#compdef dashdog
+
+__dashdog() {
+    typeset -A opt_args
+    local context state line
+
+    local curcontext="$curcontext"
+
+    _arguments -C \
+    '-p[the golang package doc to generate]' \
+    '--pkg[the golang package doc to generate]' \
+    '-c[the config file to load]' \
+    '--config[the config file to load]' \
+    '--log[log level, the log will print to stdout]:log:->log' \
+    '--path[the path to generate docset]:path:_files' \
+    '--cfbundle[the bundle of the root page]' \
+    '--path-regex[the sub path which match the `pattern` will be able to generate]' \
+    '--bundle-pattern[a `pattern` to match the path of the sub module name]' \
+    '--bundle-replace[a `replace-pattern` to replace the path which matched by --bundle-pattern flag]' \
+    '-h[show help message]' \
+    '--help[show help message]' \
+
+    case "$state" in
+        log)
+        # _value 'log' 'debug info warn error off'
+        level=( debug info warn error off )
+        _describe -t level 'level' level
+        ;;
+    esac
+}
+
+__dashdog "#@"

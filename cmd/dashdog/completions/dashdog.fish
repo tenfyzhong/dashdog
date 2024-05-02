@@ -1,0 +1,12 @@
+complete -c dashdog -f
+complete -c dashdog -r -F -s c -l config -d 'the config file to load'
+complete -c dashdog -r -f -l log -a 'debug info warn error off' -d 'log level, the log will print to stdout'
+complete -c dashdog -r -F -l path -d 'the path to generate docset'
+complete -c dashdog -r -f -l name -d 'the name of the docset'
+complete -c dashdog -r -f -l url -d 'the source url of the docset'
+complete -c dashdog -r -f -l cfbundle -d 'the bundle of the root page'
+complete -c dashdog -r -f -l path-regex -d 'the sub path which match the `pattern` will be able to generate'
+complete -c dashdog -r -f -l bundle-pattern -d 'a `pattern` to match the path of the sub module name'
+complete -c dashdog -r -f -l bundle-replace -d 'a `replace-pattern` to replace the path which matched by --bundle-pattern flag'
+complete -c dashdog -s h -l help -d 'show help'
+complete -c dashdog -s v -l version -d 'print the version'
