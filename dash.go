@@ -531,8 +531,8 @@ func (d Dash) insertAnchor(u *url.URL, localPath string, doc *html.Node) []*Refe
 
 			if !sel.AnchorOnly {
 				anchor := attr(a, "name")
-				// CbunelName TODO
-				href := fmt.Sprintf(`<dash_entry_name=%s><dash_entry_originalName=%s.%s><dash_entry_menuDescription=%s>%s#%s`, name, d.bundleNameOfPath(u.Path), name, d.config.Plist.CFBundleName, localPath, anchor)
+				bundle := d.bundleNameOfPath(u.Path)
+				href := fmt.Sprintf(`<dash_entry_name=%s><dash_entry_originalName=%s.%s><dash_entry_menuDescription=%s>%s#%s`, name, bundle, name, bundle, localPath, anchor)
 				ref := &Reference{
 					name:  name,
 					etype: sel.Type,
