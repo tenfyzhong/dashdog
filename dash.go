@@ -263,8 +263,16 @@ func (d *Dash) populateData(item *fetchItem) error {
 		return errors.Wrapf(err, "get %s", urlStr)
 	}
 
+	if resp.StatusCode() == http.StatusNotFound {
+		if item.needPopulate {
+			return errors.Errorf("%s status %d", urlStr, resp.StatusCode())
+		}
+		slog.Error("%s status %s", urlStr, resp.Status())
+		return nil
+	}
+
 	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("%s status %d", urlStr, resp.StatusCode())
+		return errors.Errorf("%s status %s", urlStr, resp.Status())
 	}
 
 	if !item.needPopulate {
