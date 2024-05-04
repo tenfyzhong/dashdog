@@ -24,13 +24,67 @@ import (
 
 type fetchItem struct {
 	u            *url.URL
-	localPath    string
 	level        int
 	needPopulate bool
+	suffix       string
+
+	resp *resty.Response
+}
+
+func newFetchItem(u *url.URL, level int, needPopulate bool, httpClient *resty.Client) (*fetchItem, error) {
+	i := &fetchItem{
+		u:            u,
+		level:        level,
+		needPopulate: needPopulate,
+		suffix:       "",
+	}
+
+	resp, err := httpClient.R().Get(u.String())
+	if err != nil {
+		return nil, errors.Errorf("head of %s", u.String())
+	}
+
+	contentType := resp.Header().Get("Content-Type")
+	i.adjustSuffix(contentType)
+
+	if needPopulate {
+		// only html need to populate
+		i.needPopulate = strings.Contains(contentType, "text/html")
+	}
+	i.resp = resp
+
+	return i, nil
+}
+
+func (i *fetchItem) adjustSuffix(contentType string) {
+	contentType = strings.ToLower(contentType)
+	if strings.Contains(contentType, "image/svg+xml") && !strings.HasSuffix(i.u.Path, ".svg") {
+		i.suffix = ".svg"
+	} else if strings.Contains(contentType, "text/html") && !strings.HasSuffix(i.u.Path, ".html") {
+		i.suffix = ".html"
+	}
+
+}
+
+func (i fetchItem) localPath() string {
+	if strings.HasSuffix(i.u.Path, i.suffix) {
+		return i.u.Host + i.u.Path
+	}
+	return i.u.Host + i.u.Path + i.suffix
+}
+
+func (i fetchItem) localURL(prefix string) string {
+	cu := *i.u
+	if !strings.HasSuffix(cu.Path, i.suffix) {
+		cu.Path += i.suffix
+	}
+	str := cu.String()
+	str, _ = strings.CutPrefix(str, cu.Scheme+":/")
+	return prefix + str
 }
 
 func (item fetchItem) String() string {
-	return fmt.Sprintf("url:%s localPath:%s level:%d needPopulate:%v", item.u.String(), item.localPath, item.level, item.needPopulate)
+	return fmt.Sprintf("url:%s localPath:%s level:%d needPopulate:%v", item.u.String(), item.localPath(), item.level, item.needPopulate)
 }
 
 type Dash struct {
@@ -44,16 +98,24 @@ type Dash struct {
 	fetchQueue             []*fetchItem
 	fetchPathRegex         *regexp.Regexp
 	subPathBundleNameRegex *regexp.Regexp
+
+	refs []*Reference
 }
 
 type Reference struct {
-	name  string
-	etype string
-	href  string
+	name      string
+	etype     string
+	bundle    string
+	localPath string
+	anchor    string
+}
+
+func (r Reference) href() string {
+	return fmt.Sprintf(`<dash_entry_name=%s><dash_entry_originalName=%s.%s><dash_entry_menuDescription=%s>%s#%s`, r.name, r.bundle, r.name, r.bundle, r.localPath, r.anchor)
 }
 
 func (r Reference) String() string {
-	return fmt.Sprintf("name:%s type:%s href:%s", r.name, r.etype, r.href)
+	return fmt.Sprintf("name:%s type:%s href:%s", r.name, r.etype, r.href())
 }
 
 func NewDash(config Config) (*Dash, error) {
@@ -118,8 +180,12 @@ func (d *Dash) Build() error {
 	}
 	slog.Info("parse url", slog.String("url", d.config.URL))
 
-	localPath := localPathOfURL(u, ".html")
-	d.indexFilePath = localPath
+	item, err := newFetchItem(u, 0, true, d.httpClient)
+	if err != nil {
+		return errors.Wrapf(err, "newFetchItem %+v", u)
+	}
+
+	d.indexFilePath = item.localPath()
 
 	// create the info.plist
 	if err := d.infoPlist(); err != nil {
@@ -127,47 +193,24 @@ func (d *Dash) Build() error {
 	}
 	slog.Info("create info.plist", slog.String("path", d.tree.InfoPlist()))
 
-	item := &fetchItem{
-		u:            u,
-		localPath:    localPath,
-		level:        0,
-		needPopulate: true,
+	slog.Debug("popItem", slog.String("item", item.String()))
+	if _, err := d.populateData(item); err != nil {
+		return errors.Wrapf(err, "populateData")
 	}
-	d.pushItem(item)
-	slog.Info("push root item", slog.String("item", item.String()))
 
-	// populate the sqllite index
-	for !d.queueEmpty() {
-		item, ok := d.popItem()
-		if !ok {
-			slog.Info("popItem finish")
-			break
-		}
+	// sort.Slice(d.refs, func(i, j int) bool {
+	// 	if d.refs[i].bundle != d.refs[j].bundle {
+	// 		return d.refs[i].bundle < d.refs[j].bundle
+	// 	}
+	// 	return d.refs[i].name < d.refs[j].name
+	// })
 
-		slog.Debug("popItem", slog.String("item", item.String()))
-		if err := d.populateData(item); err != nil {
-			return errors.Wrapf(err, "populateData")
-		}
+	if err := d.insertDB(); err != nil {
+		return errors.Wrapf(err, "insertDB")
 	}
+	slog.Info("insertDB", slog.String("item", item.String()), slog.Int("len(d.refs)", len(d.refs)))
 
 	return nil
-}
-
-func (d Dash) queueEmpty() bool {
-	return len(d.fetchQueue) == 0
-}
-
-func (d *Dash) pushItem(item *fetchItem) {
-	d.fetchQueue = append(d.fetchQueue, item)
-}
-
-func (d *Dash) popItem() (*fetchItem, bool) {
-	if d.queueEmpty() {
-		return nil, false
-	}
-	item := d.fetchQueue[0]
-	d.fetchQueue = d.fetchQueue[1:]
-	return item, true
 }
 
 func (d Dash) saveFile(localPath string, body []byte) error {
@@ -248,37 +291,29 @@ func (d *Dash) createDB() error {
 	return nil
 }
 
-func (d *Dash) populateData(item *fetchItem) error {
-	urlStr := item.u.String()
-
+func (d *Dash) populateData(item *fetchItem) (*fetchItem, error) {
 	checkPath := item.u.Host + item.u.Path
 	if d.downloaded[checkPath] {
 		slog.Debug("downloaded", slog.String("path", checkPath))
-		return nil
+		return item, nil
 	}
 	d.downloaded[checkPath] = true
 
-	resp, err := d.httpClient.R().Get(urlStr)
-	if err != nil {
-		return errors.Wrapf(err, "get %s", urlStr)
-	}
+	urlStr := item.u.String()
+	resp := item.resp
 
 	if resp.StatusCode() == http.StatusNotFound {
-		if item.needPopulate {
-			return errors.Errorf("%s status %d", urlStr, resp.StatusCode())
-		}
-		slog.Error("%s status %s", urlStr, resp.Status())
-		return nil
+		return nil, ErrNotFound
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("%s status %s", urlStr, resp.Status())
+		return nil, errors.Errorf("%s status %s", urlStr, resp.Status())
 	}
 
 	if !item.needPopulate {
-		err = d.saveFile(item.localPath, resp.Body())
-		slog.Debug("download resource", slog.String("localPath", item.localPath), slog.String("url", item.u.String()))
-		return errors.Wrapf(err, "saveFile")
+		err := d.saveFile(item.localPath(), resp.Body())
+		slog.Debug("download resource", slog.String("localPath", item.localPath()), slog.String("url", item.u.String()))
+		return item, errors.Wrapf(err, "saveFile")
 	}
 
 	slog.Info("populateData url", slog.String("url", urlStr))
@@ -288,7 +323,7 @@ func (d *Dash) populateData(item *fetchItem) error {
 	r := bytes.NewReader(resp.Body())
 	doc, err := html.Parse(r)
 	if err != nil {
-		return errors.Wrapf(err, "Parse html of %s", urlStr)
+		return nil, errors.Wrapf(err, "Parse html of %s", urlStr)
 	}
 
 	// remove nodes before fetch resource
@@ -300,11 +335,11 @@ func (d *Dash) populateData(item *fetchItem) error {
 
 	err = d.fetchResource(u, doc, item.level)
 	if err != nil {
-		return errors.Wrapf(err, "fetchResource %s", urlStr)
+		return nil, errors.Wrapf(err, "fetchResource %s", urlStr)
 	}
 	slog.Info("fetchResource", slog.String("item", item.String()))
 
-	subRefs := d.insertAnchor(u, item.localPath, doc)
+	subRefs := d.insertAnchor(u, item.localPath(), doc)
 	slog.Info("insertAnchor", slog.String("item", item.String()))
 
 	d.insertOnlineRedirection(doc, urlStr)
@@ -313,26 +348,25 @@ func (d *Dash) populateData(item *fetchItem) error {
 	d.insertLink(doc)
 	slog.Info("insertLink", slog.String("item", item.String()))
 
-	err = d.writeHTML(item.localPath, doc)
+	err = d.writeHTML(item.localPath(), doc)
 	if err != nil {
-		return errors.Wrap(err, "writeHTML")
+		return nil, errors.Wrap(err, "writeHTML")
 	}
-	slog.Info("write html", slog.String("path", item.localPath))
+	slog.Info("write html", slog.String("path", item.localPath()))
 
-	refs := []*Reference{
-		{
-			name:  d.bundleNameOfPath(item.u.Path),
-			etype: "Package",
-			href:  item.localPath,
-		},
+	bundleName := d.bundleNameOfPath(item.u.Path)
+	pkgRef := &Reference{
+		name:      bundleName,
+		etype:     "Package",
+		bundle:    bundleName,
+		localPath: item.localPath(),
+		anchor:    "",
 	}
-	slog.Info("insert package", slog.String("name", refs[0].name), slog.String("type", refs[0].etype), slog.String("href", refs[0].href))
-	refs = append(refs, subRefs...)
+	slog.Info("insert package", slog.String("name", pkgRef.name), slog.String("type", pkgRef.etype), slog.String("href", pkgRef.href()))
+	d.refs = append(d.refs, pkgRef)
+	d.refs = append(d.refs, subRefs...)
 
-	d.insertDB(refs)
-	slog.Info("insertDB", slog.String("item", item.String()), slog.Int("len(refs)", len(refs)))
-
-	return nil
+	return item, nil
 }
 
 func (d Dash) bundleNameOfPath(path string) string {
@@ -402,6 +436,7 @@ func (d Dash) setAttr(doc *html.Node) {
 }
 
 func (d *Dash) fetchResource(ourl *url.URL, doc *html.Node, level int) error {
+	slog.Debug("fetchResource", slog.String("url", ourl.String()), slog.Int("level", level))
 	prefix := pathRelativeToRoot(ourl.Path)
 
 	resourceSelector := css.MustCompile("*[href],*[src]")
@@ -435,16 +470,28 @@ func (d *Dash) fetchResource(ourl *url.URL, doc *html.Node, level int) error {
 			//   from the same site, is a sub page => set the relative url, push to queue
 
 			if node.DataAtom != atom.A {
-				suffix := ""
-				node.Attr[i].Val = relativeURL(prefix, u, suffix)
-				item := &fetchItem{
-					u:            u,
-					localPath:    localPathOfURL(u, suffix),
-					level:        level,
-					needPopulate: false,
+				item, err := newFetchItem(u, level, false, d.httpClient)
+				if err != nil {
+					return errors.Wrapf(err, "newFetchItem")
 				}
-				d.pushItem(item)
-				slog.Debug("pushItem", slog.String("item", item.String()))
+
+				if item.resp.StatusCode() == http.StatusNotFound {
+					slog.Error("populateData failed", slog.Any("item", item), slog.String("err", fmt.Sprintf("%+v", err)))
+					node.Parent.RemoveChild(node)
+					break
+				} else if item.resp.StatusCode() != http.StatusOK {
+					return errors.Wrapf(err, "newFetchItem")
+				}
+
+				slog.Debug("process item", slog.String("item", item.String()), slog.Any("node", node), slog.Any("attr", attr))
+
+				item, err = d.populateData(item)
+				if err != nil {
+					return errors.Wrapf(err, "populateData")
+				} else {
+					node.Attr[i].Val = item.localURL(prefix)
+				}
+
 				continue
 			}
 
@@ -464,16 +511,19 @@ func (d *Dash) fetchResource(ourl *url.URL, doc *html.Node, level int) error {
 			}
 
 			if level+1 <= d.config.Depth-1 && d.pathMatchRegex(u.Path) {
-				suffix := ".html"
-				node.Attr[i].Val = relativeURL(prefix, u, suffix)
-				item := &fetchItem{
-					u:            u,
-					localPath:    localPathOfURL(u, suffix),
-					level:        level + 1,
-					needPopulate: true,
+				item, err := newFetchItem(u, level+1, true, d.httpClient)
+				if err != nil {
+					return errors.Wrapf(err, "newFetchItem")
 				}
-				d.pushItem(item)
-				slog.Debug("pushItem", slog.String("item", item.String()))
+				slog.Debug("process item", slog.String("item", item.String()))
+				item, err = d.populateData(item)
+
+				if err != nil {
+					return errors.Wrapf(err, "populateData")
+				} else {
+					node.Attr[i].Val = item.localURL(prefix)
+					slog.Debug("populateData data succ", slog.Any("item", item), slog.String("attr.val", node.Attr[i].Val))
+				}
 			} else {
 				node.Attr[i].Val = u.String()
 			}
@@ -540,11 +590,12 @@ func (d Dash) insertAnchor(u *url.URL, localPath string, doc *html.Node) []*Refe
 			if !sel.AnchorOnly {
 				anchor := attr(a, "name")
 				bundle := d.bundleNameOfPath(u.Path)
-				href := fmt.Sprintf(`<dash_entry_name=%s><dash_entry_originalName=%s.%s><dash_entry_menuDescription=%s>%s#%s`, name, bundle, name, bundle, localPath, anchor)
 				ref := &Reference{
-					name:  name,
-					etype: sel.Type,
-					href:  href,
+					name:      name,
+					etype:     sel.Type,
+					bundle:    bundle,
+					localPath: localPath,
+					anchor:    anchor,
 				}
 				refs = append(refs, ref)
 				slog.Debug("new ref", slog.String("ref", ref.String()))
@@ -558,11 +609,15 @@ func (d Dash) insertAnchor(u *url.URL, localPath string, doc *html.Node) []*Refe
 	return refs
 }
 
-func (d *Dash) insertDB(refs []*Reference) {
-	for _, ref := range refs {
-		d.db.Exec(`INSERT OR IGNORE INTO searchIndex(name, type, path) VALUES (?,?,?)`, ref.name, ref.etype, ref.href)
-		slog.Info("insert ref to db", slog.String("name", ref.name), slog.String("type", ref.etype), slog.String("href", ref.href))
+func (d *Dash) insertDB() error {
+	for _, ref := range d.refs {
+		_, err := d.db.Exec(`INSERT OR IGNORE INTO searchIndex(name, type, path) VALUES (?,?,?)`, ref.name, ref.etype, ref.href())
+		if err != nil {
+			return errors.Wrapf(err, "insert searchIndex %s %s %s", ref.name, ref.etype, ref.href())
+		}
+		slog.Info("insert ref to db", slog.String("name", ref.name), slog.String("type", ref.etype), slog.String("href", ref.href()))
 	}
+	return nil
 }
 
 func (d Dash) writeHTML(path string, doc *html.Node) error {

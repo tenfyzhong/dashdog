@@ -108,7 +108,6 @@ page:
         - .go-Main-aside
         - .go-Main-footer
         - .go-Footer
-        - .UnitReadme-content img[src*=badge]
     set_attrs:
         - selector: .go-Main
           attr:
