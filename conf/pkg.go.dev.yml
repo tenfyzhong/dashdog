@@ -1,24 +1,24 @@
-path: ""
-name: ""
-url: ""
+path: ""  # the path to generate the docset
+name: ""  # the name of the docset
+url: ""   # the url we should parse and generate
 plist:
-    cfbundle_identifier: godoc
-    cfbundle_name: ""
-    doc_set_platform_family: godoc
-    dash_doc_set_play_url: https://go.dev/play/
-    is_java_script_enabled: true
-    dash_doc_set_default_ftsenabled: false
-depth: 1
-sub_path_regex: ""
-sub_path_bundle_name:
-    pattern: ""
-    replace: ""
+    cfbundle_identifier: godoc  # for golang doc is godoc
+    cfbundle_name: "" # the bundle name of the docset
+    doc_set_platform_family: godoc # for golang doc is godoc
+    dash_doc_set_play_url: https://go.dev/play/ # Playgrounds url
+    is_java_script_enabled: true # enable javascript
+    dash_doc_set_default_ftsenabled: false # Enable or Disable Full-Text Search
+depth: 1 # the depth we will parse the sub page
+sub_path_regex: "" # only the sub page path match the regex will be prcess
+sub_path_bundle_name: # we can use this section to generate the bundle name of the sub page
+    pattern: "" # a pattern match the path
+    replace: "" # a pattern to replace, the result will be the bundle name of the sub page
 index:
-    index_rows:
-        - selector: h3#pkg-index
-          type: Section
-          name:
-            type: 2
+    index_rows: # select node to insert anchor/toc/db
+        - selector: h3#pkg-index # select a h3 node with pkg-index id
+          type: Section # the type is section
+          name: 
+            type: 2 # indices how to get the node name 0=use the node text, 1=use the value of an attr, the attr key is the `Value`, 2=Use the `Value` as the name
             value: Sections
           level: 1
           anchor_only: true
@@ -100,7 +100,7 @@ index:
           level: 0
           anchor_only: false
 page:
-    remove_node_selector:
+    remove_node_selector: # we can select some nodes to delete
         - .go-Header
         - .go-Main-header
         - .go-Main-banner
@@ -108,8 +108,8 @@ page:
         - .go-Main-aside
         - .go-Main-footer
         - .go-Footer
-    set_attrs:
+    set_attrs: # we can select some nodes to set attr
         - selector: .go-Main
           attr:
-            key: style
-            value: 'display: block'
+            key: style # the attr key
+            value: 'display: block' # the attr value
