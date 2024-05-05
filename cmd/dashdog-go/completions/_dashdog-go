@@ -18,7 +18,7 @@ __dashdog_go() {
     '--bundle-pattern[a `pattern` to match the path of the sub module name]' \
     '--bundle-replace[a `replace-pattern` to replace the path which matched by --bundle-pattern flag]' \
     '-h[show help message]' \
-    '--help[show help message]' \
+    '--help[show help message]'
 
     case "$state" in
         log)

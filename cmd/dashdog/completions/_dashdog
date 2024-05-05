@@ -19,7 +19,7 @@ __dashdog() {
     '--bundle-replace[a `replace-pattern` to replace the path which matched by --bundle-pattern flag]' \
     '-h[show help message]' \
     '--help[show help message]' \
-    '-v[print the version]'
+    '-v[print the version]' \
     '--version[print the version]'
 
     case "$state" in
