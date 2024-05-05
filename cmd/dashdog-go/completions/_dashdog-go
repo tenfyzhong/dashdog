@@ -1,6 +1,6 @@
-#compdef dashdog
+#compdef dashdog-go
 
-__dashdog() {
+__dashdog_go() {
     typeset -A opt_args
     local context state line
 
@@ -29,4 +29,4 @@ __dashdog() {
     esac
 }
 
-__dashdog "#@"
+__dashdog_go "#@"

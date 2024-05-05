@@ -24,4 +24,4 @@ _dashdog_go_complete() {
     return 0
 }
 
-complete -F _dashdog_go_complete dashdog
+complete -F _dashdog_go_complete dashdog-go
