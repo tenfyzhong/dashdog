@@ -108,7 +108,7 @@ func main() {
 		HideHelp:                   false,
 		HideHelpCommand:            true,
 		HideVersion:                false,
-		EnableShellCompletion:      true,
+		EnableShellCompletion:      false,
 		ShellCompletionCommandName: "dashdog",
 		Before: func(_ context.Context, cmd *cli.Command) error {
 			setLogLevel(cmd)
