@@ -149,25 +149,26 @@ func NewDash(config Config) (*Dash, error) {
 }
 
 func (d *Dash) Build() error {
-	slog.Info("build", slog.Any("config", d.config))
+	slog.Info("build", slog.String("name", d.config.Name))
+	slog.Debug("build", slog.Any("config", d.config))
 
 	// remove old data if exist
 	if err := d.tree.Rm(); err != nil {
 		return errors.Wrapf(err, "rm")
 	}
-	slog.Info("remove docpath", slog.String("path", d.tree.Documents()))
+	slog.Debug("remove docpath", slog.String("path", d.tree.Documents()))
 
 	// Create the docset folder
 	if err := d.tree.Mkdir(); err != nil {
 		return errors.Wrapf(err, "mkdir")
 	}
-	slog.Info("mkdir", slog.String("path", d.tree.Documents()))
+	slog.Debug("mkdir", slog.String("path", d.tree.Documents()))
 
 	// create sqlite index
 	if err := d.createDB(); err != nil {
 		return errors.Wrapf(err, "createDB")
 	}
-	slog.Info("open db", slog.String("path", d.tree.DB()))
+	slog.Debug("open db", slog.String("path", d.tree.DB()))
 	defer func() {
 		if d.db != nil {
 			d.db.Close()
@@ -178,7 +179,7 @@ func (d *Dash) Build() error {
 	if err != nil {
 		return errors.Wrapf(err, "Parse %s", d.config.URL)
 	}
-	slog.Info("parse url", slog.String("url", d.config.URL))
+	slog.Debug("parse url", slog.String("url", d.config.URL))
 
 	item, err := newFetchItem(u, 0, true, d.httpClient)
 	if err != nil {
@@ -191,7 +192,7 @@ func (d *Dash) Build() error {
 	if err := d.infoPlist(); err != nil {
 		return errors.Wrap(err, "infoPlist")
 	}
-	slog.Info("create info.plist", slog.String("path", d.tree.InfoPlist()))
+	slog.Debug("create info.plist", slog.String("path", d.tree.InfoPlist()))
 
 	slog.Debug("popItem", slog.String("item", item.String()))
 	if _, err := d.populateData(item); err != nil {
@@ -208,7 +209,7 @@ func (d *Dash) Build() error {
 	if err := d.insertDB(); err != nil {
 		return errors.Wrapf(err, "insertDB")
 	}
-	slog.Info("insertDB", slog.String("item", item.String()), slog.Int("len(d.refs)", len(d.refs)))
+	slog.Debug("insertDB", slog.String("item", item.String()), slog.Int("len(d.refs)", len(d.refs)))
 
 	return nil
 }
@@ -316,7 +317,7 @@ func (d *Dash) populateData(item *fetchItem) (*fetchItem, error) {
 		return item, errors.Wrapf(err, "saveFile")
 	}
 
-	slog.Info("populateData url", slog.String("url", urlStr))
+	slog.Debug("populateData url", slog.String("url", urlStr))
 
 	u := item.u
 
@@ -329,30 +330,30 @@ func (d *Dash) populateData(item *fetchItem) (*fetchItem, error) {
 	// remove nodes before fetch resource
 	// and then we can not download the resource we don't need
 	d.removeNode(doc)
-	slog.Info("removeNode", slog.String("item", item.String()))
+	slog.Debug("removeNode", slog.String("item", item.String()))
 	d.setAttr(doc)
-	slog.Info("setAttr", slog.String("item", item.String()))
+	slog.Debug("setAttr", slog.String("item", item.String()))
 
 	err = d.fetchResource(u, doc, item.level)
 	if err != nil {
 		return nil, errors.Wrapf(err, "fetchResource %s", urlStr)
 	}
-	slog.Info("fetchResource", slog.String("item", item.String()))
+	slog.Debug("fetchResource", slog.String("item", item.String()))
 
 	subRefs := d.insertAnchor(u, item.localPath(), doc)
-	slog.Info("insertAnchor", slog.String("item", item.String()))
+	slog.Debug("insertAnchor", slog.String("item", item.String()))
 
 	d.insertOnlineRedirection(doc, urlStr)
-	slog.Info("insertOnlineRedirection", slog.String("url", urlStr))
+	slog.Debug("insertOnlineRedirection", slog.String("url", urlStr))
 
 	d.insertLink(doc)
-	slog.Info("insertLink", slog.String("item", item.String()))
+	slog.Debug("insertLink", slog.String("item", item.String()))
 
 	err = d.writeHTML(item.localPath(), doc)
 	if err != nil {
 		return nil, errors.Wrap(err, "writeHTML")
 	}
-	slog.Info("write html", slog.String("path", item.localPath()))
+	slog.Debug("write html", slog.String("path", item.localPath()))
 
 	bundleName := d.bundleNameOfPath(item.u.Path)
 	pkgRef := &Reference{
@@ -362,7 +363,7 @@ func (d *Dash) populateData(item *fetchItem) (*fetchItem, error) {
 		localPath: item.localPath(),
 		anchor:    "",
 	}
-	slog.Info("insert package", slog.String("name", pkgRef.name), slog.String("type", pkgRef.etype), slog.String("href", pkgRef.href()))
+	slog.Debug("insert package", slog.String("name", pkgRef.name), slog.String("type", pkgRef.etype), slog.String("href", pkgRef.href()))
 	d.refs = append(d.refs, pkgRef)
 	d.refs = append(d.refs, subRefs...)
 
@@ -393,7 +394,7 @@ func (d Dash) insertOnlineRedirection(doc *html.Node, urlStr string) {
 	page := selector.MatchFirst(doc)
 	if page != nil {
 		page.InsertBefore(node, page.FirstChild)
-		slog.Info("insert online redirection", slog.Any("node", node))
+		slog.Debug("insert online redirection", slog.Any("node", node))
 	}
 }
 
@@ -403,7 +404,7 @@ func (d Dash) removeNode(doc *html.Node) {
 		nodes := nodeSelector.MatchAll(doc)
 		for _, node := range nodes {
 			node.Parent.RemoveChild(node)
-			slog.Info("remove node", slog.String("selector", sel), slog.Any("node", anyJson(node)))
+			slog.Debug("remove node", slog.String("selector", sel), slog.Any("node", anyJson(node)))
 		}
 	}
 }
@@ -420,12 +421,12 @@ func (d Dash) setAttr(doc *html.Node) {
 					// the node has the attr to set value
 					node.Attr[i].Val = sattr.Attr.Value
 					found = true
-					slog.Info("set attr", slog.Any("sattr", anyJson(sattr)), slog.Any("node", anyJson(node)))
+					slog.Debug("set attr", slog.Any("sattr", anyJson(sattr)), slog.Any("node", anyJson(node)))
 					break
 				}
 			}
 			if !found {
-				slog.Info("add attr", slog.Any("sattr", anyJson(sattr)), slog.Any("node", anyJson(node)))
+				slog.Debug("add attr", slog.Any("sattr", anyJson(sattr)), slog.Any("node", anyJson(node)))
 				node.Attr = append(node.Attr, html.Attribute{
 					Key: sattr.Attr.Key,
 					Val: sattr.Attr.Value,
@@ -557,7 +558,7 @@ func (d Dash) insertLink(doc *html.Node) {
 	if head != nil {
 		for _, link := range links {
 			head.InsertBefore(link, head.LastChild)
-			slog.Info("insert link", slog.String("href", attr(link, "href")))
+			slog.Debug("insert link", slog.String("href", attr(link, "href")))
 		}
 	}
 
@@ -581,7 +582,7 @@ func (d Dash) insertAnchor(u *url.URL, localPath string, doc *html.Node) []*Refe
 			}
 
 			if name == "" {
-				slog.Info("name is empty", slog.Any("node", anyJson(node)))
+				slog.Debug("name is empty", slog.Any("node", anyJson(node)))
 				continue
 			}
 
@@ -615,7 +616,7 @@ func (d *Dash) insertDB() error {
 		if err != nil {
 			return errors.Wrapf(err, "insert searchIndex %s %s %s", ref.name, ref.etype, ref.href())
 		}
-		slog.Info("insert ref to db", slog.String("name", ref.name), slog.String("type", ref.etype), slog.String("href", ref.href()))
+		slog.Debug("insert ref to db", slog.String("name", ref.name), slog.String("type", ref.etype), slog.String("href", ref.href()))
 	}
 	return nil
 }
