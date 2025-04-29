@@ -28,4 +28,5 @@ jobs:
       bin-path: "./cmd/dashdog"
       command: "dashdog"
       build-option: "-ldflags \"-X 'github.com/tenfyzhong/dashdog/cmd/dashdog/version.Version=${{ needs.tag.outputs.version }}'\""
-
+      goos: '["darwin"]'
+      goarch: '["amd64", "arm64"]'
