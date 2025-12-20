@@ -24,11 +24,11 @@ import (
 )
 
 const (
-	maxDownloadedSize     = 10000
-	maxRefsSize           = 50000
-	maxResourcesPerLevel  = 1000
-	maxFileSize           = 10 * 1024 * 1024 // 10MB
-	httpTimeout           = 30 * time.Second
+	maxDownloadedSize    = 10000
+	maxRefsSize          = 50000
+	maxResourcesPerLevel = 1000
+	maxFileSize          = 10 * 1024 * 1024 // 10MB
+	httpTimeout          = 30 * time.Second
 )
 
 type fetchItem struct {
@@ -794,6 +794,7 @@ func (d Dash) writeHTML(path string, doc *html.Node) error {
 	if err != nil {
 		return errors.Wrapf(err, "Create temp %s", tempPath)
 	}
+	defer f.Close()
 
 	err = html.Render(f, doc)
 	f.Close()

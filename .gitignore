@@ -22,3 +22,4 @@ go.work
 
 *.docset/
 dashdog
+dashdog-go
