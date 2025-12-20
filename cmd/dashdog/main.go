@@ -120,7 +120,7 @@ func main() {
 		ExitErrHandler: func(_ context.Context, _ *cli.Command, err error) {
 			if err != nil {
 				slog.Error("err", slog.String("err", fmt.Sprintf("%+v", err)))
-				os.Exit(-11)
+				os.Exit(1)
 			}
 		},
 		Suggest: true,
@@ -145,8 +145,10 @@ func action(_ context.Context, cmd *cli.Command) error {
 		return errors.Wrapf(err, "Unmarshal config, [%s]", string(data))
 	}
 	overwriteConfig(&config, cmd)
-	if config.Depth == 0 {
-		config.Depth = 1
+
+	// Validate config
+	if err := validateConfig(config); err != nil {
+		return errors.Wrap(err, "validateConfig")
 	}
 
 	dash, err := dashdog.NewDash(config)
@@ -162,11 +164,33 @@ func action(_ context.Context, cmd *cli.Command) error {
 	return nil
 }
 
+func validateConfig(config dashdog.Config) error {
+	if config.Name == "" {
+		return errors.Errorf("config.name is required")
+	}
+	if config.URL == "" {
+		return errors.Errorf("config.url is required")
+	}
+	if config.Plist.CFBundleIdentifier == "" {
+		return errors.Errorf("config.plist.cfbundle_identifier is required")
+	}
+	if config.Plist.CFBundleName == "" {
+		return errors.Errorf("config.plist.cfbundle_name is required")
+	}
+	if config.Plist.DocSetPlatformFamily == "" {
+		return errors.Errorf("config.plist.doc_set_platform_family is required")
+	}
+	if len(config.Index.IndexRows) == 0 {
+		return errors.Errorf("config.index.index_rows is required")
+	}
+	return nil
+}
+
 func overwriteConfig(config *dashdog.Config, cmd *cli.Command) {
 	if cmd.IsSet(flagPath) {
 		config.Path = cmd.String(flagPath)
 	} else {
-		config.Path = defaultPath
+		config.Path = os.ExpandEnv(defaultPath)
 	}
 
 	if cmd.IsSet(flagName) {
@@ -216,8 +240,9 @@ func setLogLevel(cmd *cli.Command) {
 		Level:     lvl,
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.SourceKey {
-				s := a.Value.Any().(*slog.Source)
-				s.File = path.Base(s.File)
+				if src, ok := a.Value.Any().(*slog.Source); ok {
+					src.File = path.Base(src.File)
+				}
 			}
 			return a
 		},
