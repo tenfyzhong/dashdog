@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"text/template"
+	"time"
 
 	css "github.com/andybalholm/cascadia"
 	"github.com/go-resty/resty/v2"
@@ -20,6 +21,14 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+)
+
+const (
+	maxDownloadedSize    = 10000
+	maxRefsSize          = 50000
+	maxResourcesPerLevel = 1000
+	maxFileSize          = 10 * 1024 * 1024 // 10MB
+	httpTimeout          = 30 * time.Second
 )
 
 type fetchItem struct {
@@ -79,7 +88,10 @@ func (i fetchItem) localURL(prefix string) string {
 		cu.Path += i.suffix
 	}
 	str := cu.String()
-	str, _ = strings.CutPrefix(str, cu.Scheme+":/")
+	prefixToRemove := cu.Scheme + "://"
+	if strings.HasPrefix(str, prefixToRemove) {
+		str = str[len(prefixToRemove):]
+	}
 	return prefix + str
 }
 
@@ -111,21 +123,50 @@ type Reference struct {
 }
 
 func (r Reference) href() string {
-	return fmt.Sprintf(`<dash_entry_name=%s><dash_entry_originalName=%s.%s><dash_entry_menuDescription=%s>%s#%s`, r.name, r.bundle, r.name, r.bundle, r.localPath, r.anchor)
+	base := fmt.Sprintf(`<dash_entry_name=%s><dash_entry_originalName=%s.%s><dash_entry_menuDescription=%s>%s`,
+		r.name, r.bundle, r.name, r.bundle, r.localPath)
+	if r.anchor != "" {
+		base += "#" + r.anchor
+	}
+	return base
 }
 
 func (r Reference) String() string {
 	return fmt.Sprintf("name:%s type:%s href:%s", r.name, r.etype, r.href())
 }
 
+// sanitizeName removes or replaces problematic characters from docset names
+func sanitizeName(name string) string {
+	// Remove or replace problematic characters
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	name = strings.ReplaceAll(name, ":", "-")
+	name = strings.ReplaceAll(name, "*", "-")
+	name = strings.ReplaceAll(name, "?", "-")
+	name = strings.ReplaceAll(name, "\"", "-")
+	name = strings.ReplaceAll(name, "<", "-")
+	name = strings.ReplaceAll(name, ">", "-")
+	name = strings.ReplaceAll(name, "|", "-")
+
+	// Remove leading/trailing dots and spaces
+	name = strings.Trim(name, ". ")
+
+	// Limit length
+	if len(name) > 100 {
+		name = name[:100]
+	}
+
+	return name
+}
+
 func NewDash(config Config) (*Dash, error) {
 	if config.Depth == 0 {
 		config.Depth = 1
 	}
-	config.Name = strings.ReplaceAll(config.Name, "/", "-")
+	config.Name = sanitizeName(config.Name)
 
 	d := &Dash{
-		httpClient: resty.New(),
+		httpClient: resty.New().SetTimeout(httpTimeout).SetHeader("User-Agent", "dashdog/1.0"),
 		tree:       newDocTree(config.Path, config.Name),
 		config:     config,
 		downloaded: map[string]bool{},
@@ -215,21 +256,46 @@ func (d *Dash) Build() error {
 }
 
 func (d Dash) saveFile(localPath string, body []byte) error {
-	dirname := filepath.Dir(localPath)
+	// Clean the path and check for traversal
+	cleanPath := filepath.Clean(localPath)
+	if strings.HasPrefix(cleanPath, "../") || strings.Contains(cleanPath, "/../") {
+		return errors.Errorf("path traversal detected: %s", localPath)
+	}
+
+	dirname := filepath.Dir(cleanPath)
 	absPath := filepath.Join(d.tree.Documents(), dirname)
+
+	// Verify absPath is still within Documents
+	if !strings.HasPrefix(absPath, d.tree.Documents()) {
+		return errors.Errorf("path escapes Documents directory: %s", localPath)
+	}
+
 	err := os.MkdirAll(absPath, 0755)
 	if err != nil {
 		return errors.Wrapf(err, "MkdirAll %s", absPath)
 	}
 	slog.Debug("mkdir", slog.String("path", absPath))
 
-	absPath = filepath.Join(d.tree.Documents(), localPath)
-	_, err = os.Stat(absPath)
+	absPath = filepath.Join(d.tree.Documents(), cleanPath)
+
+	// Verify final path is still within Documents
+	if !strings.HasPrefix(absPath, d.tree.Documents()) {
+		return errors.Errorf("path escapes Documents directory: %s", localPath)
+	}
+
+	info, err := os.Stat(absPath)
 	if err == nil {
-		return nil
+		if info.IsDir() {
+			return errors.Errorf("path exists as directory: %s", absPath)
+		}
+		return nil // File exists, skip
 	}
 	if !os.IsNotExist(err) {
 		return errors.Wrapf(err, "Stat file %s", localPath)
+	}
+
+	if len(body) > maxFileSize {
+		return errors.Errorf("file size %d exceeds maximum %d", len(body), maxFileSize)
 	}
 
 	err = os.WriteFile(absPath, body, 0644)
@@ -252,7 +318,7 @@ func (d Dash) infoPlist() error {
 		// DashDocSetFallbackURL: d.config.URL,
 	}
 
-	t, err := template.New(d.config.Name).Parse(plistTpl)
+	t, err := template.New("info_plist").Parse(plistTpl)
 	if err != nil {
 		return errors.Wrap(err, "Parse plistTpl")
 	}
@@ -261,9 +327,13 @@ func (d Dash) infoPlist() error {
 	if err != nil {
 		return errors.Wrapf(err, "Create %s", d.tree.InfoPlist())
 	}
+	defer file.Close()
 
 	err = t.Execute(file, m)
-	return errors.Wrapf(err, "Execute m:%+v", m)
+	if err != nil {
+		return errors.Wrapf(err, "Execute m:%+v", m)
+	}
+	return nil
 }
 
 func (d *Dash) createDB() error {
@@ -274,17 +344,16 @@ func (d *Dash) createDB() error {
 		return errors.Wrapf(err, "Open db, %s", dbname)
 	}
 
-	// DELETE FROM <table>;
-	// UPDATE SQLITE_SEQUENCE SET seq = 0 WHERE name = '<table>';
-	// VACUUM;
-
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT)`); err != nil {
+		db.Close()
 		return errors.Wrapf(err, "create table")
 	}
 	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS anchor ON searchIndex (name, type, path)`); err != nil {
+		db.Close()
 		return errors.Wrapf(err, "create unique index")
 	}
-	if _, err := db.Exec(`DELETE FROM searchIndex WHERE 1=1`); err != nil {
+	if _, err := db.Exec(`DELETE FROM searchIndex`); err != nil {
+		db.Close()
 		return errors.Wrapf(err, "delete rows")
 	}
 
@@ -298,6 +367,11 @@ func (d *Dash) populateData(item *fetchItem) (*fetchItem, error) {
 		slog.Debug("downloaded", slog.String("path", checkPath))
 		return item, nil
 	}
+
+	// Check memory limits
+	if len(d.downloaded) >= maxDownloadedSize {
+		slog.Warn("downloaded map too large", slog.Int("size", len(d.downloaded)))
+	}
 	d.downloaded[checkPath] = true
 
 	urlStr := item.u.String()
@@ -308,13 +382,26 @@ func (d *Dash) populateData(item *fetchItem) (*fetchItem, error) {
 	}
 
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("%s status %s", urlStr, resp.Status())
+		bodyStr := string(resp.Body())
+		if len(bodyStr) > 200 {
+			bodyStr = bodyStr[:200] + "..."
+		}
+		return nil, errors.Errorf("%s status %s, body: %s", urlStr, resp.Status(), bodyStr)
+	}
+
+	// Check content-type for non-HTML
+	contentType := resp.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "text/html") {
+		slog.Debug("non-HTML content", slog.String("url", urlStr), slog.String("content-type", contentType))
 	}
 
 	if !item.needPopulate {
 		err := d.saveFile(item.localPath(), resp.Body())
 		slog.Debug("download resource", slog.String("localPath", item.localPath()), slog.String("url", item.u.String()))
-		return item, errors.Wrapf(err, "saveFile")
+		if err != nil {
+			return nil, errors.Wrapf(err, "saveFile")
+		}
+		return item, nil
 	}
 
 	slog.Debug("populateData url", slog.String("url", urlStr))
@@ -364,8 +451,22 @@ func (d *Dash) populateData(item *fetchItem) (*fetchItem, error) {
 		anchor:    "",
 	}
 	slog.Debug("insert package", slog.String("name", pkgRef.name), slog.String("type", pkgRef.etype), slog.String("href", pkgRef.href()))
-	d.refs = append(d.refs, pkgRef)
-	d.refs = append(d.refs, subRefs...)
+
+	// Check refs size limit
+	if len(d.refs) >= maxRefsSize {
+		slog.Warn("refs slice too large", slog.Int("size", len(d.refs)))
+	} else {
+		d.refs = append(d.refs, pkgRef)
+	}
+
+	// Add subRefs with limit check
+	for _, ref := range subRefs {
+		if len(d.refs) >= maxRefsSize {
+			slog.Warn("refs slice too large, stopping additions", slog.Int("size", len(d.refs)))
+			break
+		}
+		d.refs = append(d.refs, ref)
+	}
 
 	return item, nil
 }
@@ -375,6 +476,9 @@ func (d Dash) bundleNameOfPath(path string) string {
 		return d.config.Plist.CFBundleName
 	}
 	if d.config.SubPathBundleName.Replace == "" {
+		return d.config.Plist.CFBundleName
+	}
+	if d.subPathBundleNameRegex == nil {
 		return d.config.Plist.CFBundleName
 	}
 	if !d.subPathBundleNameRegex.MatchString(path) {
@@ -403,6 +507,10 @@ func (d Dash) removeNode(doc *html.Node) {
 		nodeSelector := css.MustCompile(sel)
 		nodes := nodeSelector.MatchAll(doc)
 		for _, node := range nodes {
+			if node.Parent == nil {
+				slog.Debug("node has no parent", slog.String("selector", sel))
+				continue
+			}
 			node.Parent.RemoveChild(node)
 			slog.Debug("remove node", slog.String("selector", sel), slog.Any("node", anyJson(node)))
 		}
@@ -411,6 +519,10 @@ func (d Dash) removeNode(doc *html.Node) {
 
 func (d Dash) setAttr(doc *html.Node) {
 	for _, sattr := range d.config.Page.SetAttrs {
+		if sattr.Attr.Key == "" {
+			slog.Debug("empty attribute key", slog.Any("attr", sattr))
+			continue
+		}
 		sel := sattr.Selector
 		nodeSelector := css.MustCompile(sel)
 		nodes := nodeSelector.MatchAll(doc)
@@ -442,6 +554,13 @@ func (d *Dash) fetchResource(ourl *url.URL, doc *html.Node, level int) error {
 
 	resourceSelector := css.MustCompile("*[href],*[src]")
 	nodes := resourceSelector.MatchAll(doc)
+
+	// Limit resources per level
+	if len(nodes) > maxResourcesPerLevel {
+		slog.Warn("too many resources", slog.Int("count", len(nodes)), slog.Int("limit", maxResourcesPerLevel))
+		nodes = nodes[:maxResourcesPerLevel]
+	}
+
 	for _, node := range nodes {
 		for i, attr := range node.Attr {
 			if attr.Key != "href" && attr.Key != "src" {
@@ -451,6 +570,15 @@ func (d *Dash) fetchResource(ourl *url.URL, doc *html.Node, level int) error {
 			u, err := url.Parse(attr.Val)
 			if err != nil {
 				return errors.Wrapf(err, "Parse %s", attr.Val)
+			}
+
+			// Validate scheme - whitelist safe schemes
+			switch u.Scheme {
+			case "http", "https", "":
+				// OK
+			default:
+				slog.Debug("skipping unsupported scheme", slog.String("scheme", u.Scheme), slog.String("url", attr.Val))
+				continue
 			}
 
 			if u.Scheme == "" {
@@ -478,7 +606,9 @@ func (d *Dash) fetchResource(ourl *url.URL, doc *html.Node, level int) error {
 
 				if item.resp.StatusCode() == http.StatusNotFound {
 					slog.Error("populateData failed", slog.Any("item", item), slog.String("err", fmt.Sprintf("%+v", err)))
-					node.Parent.RemoveChild(node)
+					if node.Parent != nil {
+						node.Parent.RemoveChild(node)
+					}
 					break
 				} else if item.resp.StatusCode() != http.StatusOK {
 					return errors.Wrapf(err, "newFetchItem")
@@ -581,6 +711,19 @@ func (d Dash) insertAnchor(u *url.URL, localPath string, doc *html.Node) []*Refe
 				name = sel.Name.Value
 			}
 
+			// Sanitize name for database
+			name = strings.TrimSpace(name)
+			name = strings.ReplaceAll(name, "\n", " ")
+			name = strings.ReplaceAll(name, "\r", "")
+			name = strings.ReplaceAll(name, "\t", " ")
+			// Remove control characters
+			name = strings.Map(func(r rune) rune {
+				if r < 32 || r == 127 {
+					return -1
+				}
+				return r
+			}, name)
+
 			if name == "" {
 				slog.Debug("name is empty", slog.Any("node", anyJson(node)))
 				continue
@@ -602,8 +745,12 @@ func (d Dash) insertAnchor(u *url.URL, localPath string, doc *html.Node) []*Refe
 				slog.Debug("new ref", slog.String("ref", ref.String()))
 			}
 
-			node.Parent.InsertBefore(a, node)
-			slog.Debug("insert anchor", slog.String("a", anyJson(a)), slog.String("node", anyJson(node)))
+			if node.Parent != nil {
+				node.Parent.InsertBefore(a, node)
+				slog.Debug("insert anchor", slog.String("a", anyJson(a)), slog.String("node", anyJson(node)))
+			} else {
+				slog.Debug("node has no parent", slog.Any("node", anyJson(node)))
+			}
 		}
 	}
 
@@ -622,21 +769,48 @@ func (d *Dash) insertDB() error {
 }
 
 func (d Dash) writeHTML(path string, doc *html.Node) error {
-	absoultePath := filepath.Join(d.tree.Documents(), path)
+	// Clean the path and check for traversal
+	cleanPath := filepath.Clean(path)
+	if strings.HasPrefix(cleanPath, "../") || strings.Contains(cleanPath, "/../") {
+		return errors.Errorf("path traversal detected: %s", path)
+	}
+
+	absoultePath := filepath.Join(d.tree.Documents(), cleanPath)
+
+	// Verify absoultePath is still within Documents
+	if !strings.HasPrefix(absoultePath, d.tree.Documents()) {
+		return errors.Errorf("path escapes Documents directory: %s", path)
+	}
+
 	dirname := filepath.Dir(absoultePath)
 	err := os.MkdirAll(dirname, 0755)
 	if err != nil {
 		return errors.Wrapf(err, "dirname %s", dirname)
 	}
 
-	f, err := os.Create(absoultePath)
+	// Write to temp file first for atomicity
+	tempPath := absoultePath + ".tmp"
+	f, err := os.Create(tempPath)
 	if err != nil {
-		return errors.Wrapf(err, "Create %s", absoultePath)
+		return errors.Wrapf(err, "Create temp %s", tempPath)
 	}
 	defer f.Close()
 
 	err = html.Render(f, doc)
-	return errors.Wrapf(err, "Render doc, %s", absoultePath)
+	f.Close()
+
+	if err != nil {
+		os.Remove(tempPath) // Clean up temp on error
+		return errors.Wrapf(err, "Render doc, %s", absoultePath)
+	}
+
+	// Atomic rename
+	if err := os.Rename(tempPath, absoultePath); err != nil {
+		os.Remove(tempPath)
+		return errors.Wrapf(err, "Rename to %s", absoultePath)
+	}
+
+	return nil
 }
 
 func text(node *html.Node) string {
