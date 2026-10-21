@@ -1,14 +1,17 @@
 name: go
 on:
   push:
-  pull_request_target:
+  pull_request:
     branches: [ "main" ]
+
+permissions:
+  contents: read
 
 jobs:
   build-test:
-    uses: tenfyzhong/workflows/.github/workflows/go-build-test.yml@main
+    uses: tenfyzhong/workflows/.github/workflows/go-build-test.yml@468e08546cefd77d8f6ec41402afce1d9bbd8c72
     with:
-      go-version: '1.22'
-      path: "."
+      go-version: '1.26.10'
+      path: "./..."
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
