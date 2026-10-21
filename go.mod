@@ -2,6 +2,8 @@ module github.com/tenfyzhong/dashdog
 
 go 1.25.0
 
+toolchain go1.26.10
+
 require (
 	github.com/andybalholm/cascadia v1.3.2
 	github.com/go-resty/resty/v2 v2.12.0
